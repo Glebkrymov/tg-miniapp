@@ -45,18 +45,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Диагностика: проверяем доступность секретов
-      - name: Debug secrets availability
-        env:
-          TEST: ${{ secrets.TEST_SECRET }}
-          SA_KEY: ${{ secrets.YC_SA_KEY_JSON }}
-          SA_CREDS: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
-        run: |
-          echo "TEST_SECRET length: ${#TEST}"
-          echo "YC_SA_KEY_JSON length: ${#SA_KEY}"
-          echo "YC_SA_JSON_CREDENTIALS length: ${#SA_CREDS}"
-          echo "All secrets null check done"
-
       # Устанавливаем yc CLI
       - name: Install Yandex Cloud CLI
         run: |
@@ -90,9 +78,18 @@ jobs:
           docker push $BACKEND_IMAGE:$IMAGE_TAG
           docker push $BACKEND_IMAGE:latest
 
+      # Получаем актуальный version-id Lockbox секрета
+      - name: Get Lockbox secret version
+        id: lockbox
+        run: |
+          VERSION_ID=$(yc lockbox secret list-versions $YC_LOCKBOX_SECRET_ID --format json | jq -r '.[0].id')
+          echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
+          echo "Lockbox version: $VERSION_ID"
+
       # Деплой в Serverless Container
       - name: Deploy backend to Serverless Container
         run: |
+          VID=${{ steps.lockbox.outputs.version_id }}
           yc serverless container revision deploy \
             --container-id $YC_CONTAINER_ID \
             --image $BACKEND_IMAGE:${{ github.sha }} \
@@ -101,11 +98,11 @@ jobs:
             --concurrency 8 \
             --execution-timeout 30s \
             --service-account-id $YC_SERVICE_ACCOUNT_ID \
-            --secret environment-variable=BOT_TOKEN,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=BOT_TOKEN \
-            --secret environment-variable=POYO_API_KEY,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=POYO_API_KEY \
-            --secret environment-variable=DATABASE_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=DATABASE_URL \
-            --secret environment-variable=REDIS_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=REDIS_URL \
-            --secret environment-variable=JWT_SECRET,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=JWT_SECRET
+            --secret environment-variable=BOT_TOKEN,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=BOT_TOKEN \
+            --secret environment-variable=POYO_API_KEY,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=POYO_API_KEY \
+            --secret environment-variable=DATABASE_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=DATABASE_URL \
+            --secret environment-variable=REDIS_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=REDIS_URL \
+            --secret environment-variable=JWT_SECRET,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=JWT_SECRET
 
   # ── Деплой frontend ───────────────────────────────
   deploy-frontend:
