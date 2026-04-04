@@ -12,8 +12,10 @@ import paymentsRouter from './routes/payments';
 import referralsRouter from './routes/referrals';
 import { apiRateLimit, generateRateLimit } from './middleware/rateLimit';
 import { startPolling } from './services/queue';
-import { checkConnection as checkDb } from './config/db';
+import { checkConnection as checkDb, pool } from './config/db';
 import { checkRedisConnection } from './config/redis';
+import fs from 'fs';
+import path from 'path';
 
 const startedAt = Date.now();
 
@@ -84,9 +86,53 @@ app.use('/api/tasks', apiRateLimit as any, generateRouter);
 app.use('/api/payments', apiRateLimit as any, paymentsRouter);
 app.use('/api/referrals', apiRateLimit as any, referralsRouter);
 
+// ── Автоматические миграции при старте ──────────────
+async function runMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        id         SERIAL PRIMARY KEY,
+        filename   VARCHAR(255) UNIQUE NOT NULL,
+        applied_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    const applied = await client.query<{ filename: string }>('SELECT filename FROM _migrations');
+    const appliedSet = new Set(applied.rows.map((r) => r.filename));
+
+    const migrationsDir = path.join(__dirname, '..', 'migrations');
+    if (!fs.existsSync(migrationsDir)) {
+      logger.info('Папка миграций не найдена, пропуск');
+      return;
+    }
+
+    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
+
+    for (const file of files) {
+      if (appliedSet.has(file)) continue;
+      logger.info(`Применяю миграцию: ${file}`);
+      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+      await client.query(sql);
+      await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
+      logger.info(`Миграция применена: ${file}`);
+    }
+  } finally {
+    client.release();
+  }
+}
+
 // ── Запуск сервера ──────────────────────────────────
 app.listen(PORT, async () => {
   logger.info(`Сервер запущен на порту ${PORT}`, { port: PORT });
+
+  // Запускаем миграции
+  try {
+    await runMigrations();
+    logger.info('Миграции выполнены');
+  } catch (err) {
+    logger.error('Ошибка миграций', { error: (err as Error).message });
+  }
 
   // Устанавливаем webhook, если задан базовый URL
   if (WEBHOOK_BASE_URL) {
