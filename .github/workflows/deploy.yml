@@ -7,7 +7,14 @@ on:
 
 env:
   REGISTRY: cr.yandex
-  BACKEND_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/backend
+  YC_REGISTRY_ID: crpe96mgh563n9bjh3pm
+  YC_CONTAINER_ID: bbaudh491kibs9v9e1s7
+  YC_FOLDER_ID: b1gu5a9big59ejguopaj
+  YC_FRONTEND_BUCKET: tgapp-frontend
+  YC_LOCKBOX_SECRET_ID: e6qh5in7kthgs5gehdee
+  YC_SERVICE_ACCOUNT_ID: ajeobnl18j7h1oe5lj0j
+  BACKEND_IMAGE: cr.yandex/crpe96mgh563n9bjh3pm/backend
+  BACKEND_URL: https://d5dvg4e13p8puqjqse6p.fary004x.apigw.yandexcloud.net
 
 jobs:
   # ── Тесты ─────────────────────────────────────────
@@ -44,11 +51,10 @@ jobs:
           curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /opt/yc -n
           echo "/opt/yc/bin" >> $GITHUB_PATH
 
-      # Аутентификация через SA key (base64-encoded)
+      # Аутентификация через SA key (base64-encoded secret)
       - name: Authenticate with YC
         env:
           SA_KEY_B64: ${{ secrets.YC_SA_KEY_JSON }}
-          YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
         run: |
           echo "$SA_KEY_B64" | base64 -d > sa-key.json
           yc config set service-account-key sa-key.json
@@ -63,32 +69,31 @@ jobs:
 
       # Build и push Docker-образа
       - name: Build and push backend image
-        env:
-          IMAGE_TAG: ${{ github.sha }}
         run: |
+          IMAGE_TAG=${{ github.sha }}
           docker build \
-            -t ${{ env.BACKEND_IMAGE }}:$IMAGE_TAG \
-            -t ${{ env.BACKEND_IMAGE }}:latest \
+            -t $BACKEND_IMAGE:$IMAGE_TAG \
+            -t $BACKEND_IMAGE:latest \
             ./backend
-          docker push ${{ env.BACKEND_IMAGE }}:$IMAGE_TAG
-          docker push ${{ env.BACKEND_IMAGE }}:latest
+          docker push $BACKEND_IMAGE:$IMAGE_TAG
+          docker push $BACKEND_IMAGE:latest
 
       # Деплой в Serverless Container
       - name: Deploy backend to Serverless Container
         run: |
           yc serverless container revision deploy \
-            --container-id ${{ secrets.YC_CONTAINER_ID }} \
-            --image ${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+            --container-id $YC_CONTAINER_ID \
+            --image $BACKEND_IMAGE:${{ github.sha }} \
             --cores 1 \
             --memory 512MB \
             --concurrency 8 \
             --execution-timeout 30s \
-            --service-account-id ${{ secrets.YC_SERVICE_ACCOUNT_ID }} \
-            --secret environment-variable=BOT_TOKEN,id=${{ secrets.YC_LOCKBOX_SECRET_ID }},version-id=latest,key=BOT_TOKEN \
-            --secret environment-variable=POYO_API_KEY,id=${{ secrets.YC_LOCKBOX_SECRET_ID }},version-id=latest,key=POYO_API_KEY \
-            --secret environment-variable=DATABASE_URL,id=${{ secrets.YC_LOCKBOX_SECRET_ID }},version-id=latest,key=DATABASE_URL \
-            --secret environment-variable=REDIS_URL,id=${{ secrets.YC_LOCKBOX_SECRET_ID }},version-id=latest,key=REDIS_URL \
-            --secret environment-variable=JWT_SECRET,id=${{ secrets.YC_LOCKBOX_SECRET_ID }},version-id=latest,key=JWT_SECRET
+            --service-account-id $YC_SERVICE_ACCOUNT_ID \
+            --secret environment-variable=BOT_TOKEN,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=BOT_TOKEN \
+            --secret environment-variable=POYO_API_KEY,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=POYO_API_KEY \
+            --secret environment-variable=DATABASE_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=DATABASE_URL \
+            --secret environment-variable=REDIS_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=REDIS_URL \
+            --secret environment-variable=JWT_SECRET,id=$YC_LOCKBOX_SECRET_ID,version-id=latest,key=JWT_SECRET
 
   # ── Деплой frontend ───────────────────────────────
   deploy-frontend:
@@ -109,7 +114,7 @@ jobs:
       - name: Build frontend
         run: cd frontend && npm run build
         env:
-          VITE_API_URL: ${{ secrets.BACKEND_URL }}
+          VITE_API_URL: ${{ env.BACKEND_URL }}
 
       # Загрузка в Object Storage через AWS CLI (S3-совместимый API)
       - name: Deploy frontend to Object Storage
@@ -118,13 +123,12 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SA_SECRET_KEY }}
           AWS_DEFAULT_REGION: ru-central1
         run: |
-          aws s3 sync frontend/dist/ s3://${{ secrets.YC_FRONTEND_BUCKET }} \
+          aws s3 sync frontend/dist/ s3://$YC_FRONTEND_BUCKET \
             --endpoint-url https://storage.yandexcloud.net \
             --delete \
             --cache-control "public, max-age=31536000, immutable" \
             --exclude "index.html"
 
-          # index.html без кэша (SPA)
-          aws s3 cp frontend/dist/index.html s3://${{ secrets.YC_FRONTEND_BUCKET }}/index.html \
+          aws s3 cp frontend/dist/index.html s3://$YC_FRONTEND_BUCKET/index.html \
             --endpoint-url https://storage.yandexcloud.net \
             --cache-control "no-cache, no-store, must-revalidate"
