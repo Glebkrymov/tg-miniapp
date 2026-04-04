@@ -46,10 +46,13 @@ jobs:
 
       # Аутентификация через SA key
       - name: Authenticate with YC
+        env:
+          SA_KEY_JSON: ${{ secrets.YC_SA_KEY_JSON }}
+          YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
         run: |
-          echo '${{ secrets.YC_SA_KEY_JSON }}' > sa-key.json
+          printf '%s' "$SA_KEY_JSON" > sa-key.json
           yc config set service-account-key sa-key.json
-          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+          yc config set folder-id "$YC_FOLDER_ID"
           rm sa-key.json
 
       # Получаем IAM токен и логинимся в CR
