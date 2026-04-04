@@ -45,6 +45,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Диагностика: проверяем доступность секретов
+      - name: Debug secrets availability
+        env:
+          TEST: ${{ secrets.TEST_SECRET }}
+          SA_KEY: ${{ secrets.YC_SA_KEY_JSON }}
+          SA_CREDS: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+        run: |
+          echo "TEST_SECRET length: ${#TEST}"
+          echo "YC_SA_KEY_JSON length: ${#SA_KEY}"
+          echo "YC_SA_JSON_CREDENTIALS length: ${#SA_CREDS}"
+          echo "All secrets null check done"
+
       # Устанавливаем yc CLI
       - name: Install Yandex Cloud CLI
         run: |
