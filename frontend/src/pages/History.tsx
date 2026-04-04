@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback } from 'react';
 import { useUiStore } from '../store/uiStore';
-import { useTasksStore, Task } from '../store/tasksStore';
+import { useTasksStore } from '../store/tasksStore';
 
 const statusLabels: Record<string, { text: string; color: string }> = {
   pending:    { text: 'Ожидание',   color: 'text-yellow-600' },

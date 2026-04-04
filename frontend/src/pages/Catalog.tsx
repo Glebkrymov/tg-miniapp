@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useUiStore } from '../store/uiStore';
-import { MODELS, Category, getModelsByCategory } from '../constants/models';
+import { Category, getModelsByCategory } from '../constants/models';
 
 const tabs: { key: Category; label: string }[] = [
   { key: 'image', label: '🖼️ Image' },

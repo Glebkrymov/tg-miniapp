@@ -32,7 +32,7 @@ interface TasksState {
   setCurrentTask: (task: Task | null) => void;
 }
 
-export const useTasksStore = create<TasksState>((set, get) => ({
+export const useTasksStore = create<TasksState>((set, _get) => ({
   tasks: [],
   currentTask: null,
   total: 0,

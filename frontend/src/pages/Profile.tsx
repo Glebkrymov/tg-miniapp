@@ -11,7 +11,7 @@ interface ReferralStats {
 
 const Profile: React.FC = () => {
   const { setPage } = useUiStore();
-  const { user, balance } = useUserStore();
+  const { user } = useUserStore();
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [copied, setCopied] = useState(false);
 

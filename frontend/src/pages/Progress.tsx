@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useUiStore } from '../store/uiStore';
-import { useTasksStore, Task } from '../store/tasksStore';
+import { useTasksStore } from '../store/tasksStore';
 import { useUserStore } from '../store/userStore';
 
 const Progress: React.FC = () => {
