@@ -1,0 +1,18 @@
+# Terraform state (содержит секреты!)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Файл с реальными переменными (содержит пароли и токены)
+terraform.tfvars
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

@@ -1,0 +1,32 @@
+# ── Пример файла переменных ──────────────────────────
+# Скопируйте в terraform.tfvars и заполните реальными значениями
+# НИКОГДА не коммитьте terraform.tfvars в репозиторий!
+
+# Yandex Cloud
+yc_token     = "your-iam-or-oauth-token"
+yc_cloud_id  = "b1g..."
+yc_folder_id = "b1g..."
+yc_zone      = "ru-central1-a"
+project_name = "tgapp"
+
+# Секреты приложения
+bot_token     = "123456:ABC-DEF..."
+webapp_url    = "https://tgapp-gateway.apigw.yandexcloud.net"
+poyo_api_key  = "your-poyo-api-key"
+poyo_base_url = "https://api.poyo.ai"
+jwt_secret    = "your-random-jwt-secret-32-chars-min"
+
+# Алерты (опционально)
+alert_bot_token = ""
+alert_chat_id   = ""
+
+# Инфраструктура
+pg_password       = "strong-postgres-password"
+pg_disk_size      = 10
+valkey_password   = "strong-valkey-password"
+container_memory  = 512
+container_cores   = 1
+container_concurrency = 8
+
+# Домен (опционально)
+domain = ""

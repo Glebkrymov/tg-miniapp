@@ -1,0 +1,48 @@
+# Зависимости
+node_modules/
+.pnp
+.pnp.js
+
+# Сборка
+dist/
+build/
+*.tsbuildinfo
+
+# Переменные окружения (секреты!)
+.env
+.env.local
+.env.*.local
+
+# Логи
+logs/
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker (локальные данные)
+pgdata/
+valkeydata/
+
+# Тесты
+coverage/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.backup
+infra/terraform/.terraform.lock.hcl
+infra/terraform/terraform.tfvars
+
+# Разное
+*.tgz
+.cache/

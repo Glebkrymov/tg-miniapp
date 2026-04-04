@@ -1,0 +1,125 @@
+name: Deploy to Yandex Cloud
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: cr.yandex
+  BACKEND_IMAGE: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/backend
+
+jobs:
+  # ── Тесты ─────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: cd backend && npm ci
+
+      - name: Run backend tests
+        run: cd backend && npm test
+
+      - name: TypeScript type check
+        run: cd backend && npx tsc --noEmit
+
+  # ── Деплой backend ────────────────────────────────
+  deploy-backend:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Получаем IAM токен из SA JSON
+      - name: Get IAM token
+        id: iam
+        uses: yc-actions/yc-iam-token-fed@v1
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+
+      # Логин в Container Registry
+      - name: Docker login to cr.yandex
+        uses: docker/login-action@v3
+        with:
+          registry: cr.yandex
+          username: iam
+          password: ${{ steps.iam.outputs.token }}
+
+      # Build и push Docker-образа
+      - name: Build and push backend image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t ${{ env.BACKEND_IMAGE }}:$IMAGE_TAG \
+            -t ${{ env.BACKEND_IMAGE }}:latest \
+            ./backend
+          docker push ${{ env.BACKEND_IMAGE }}:$IMAGE_TAG
+          docker push ${{ env.BACKEND_IMAGE }}:latest
+
+      # Деплой в Serverless Container
+      - name: Deploy backend to Serverless Container
+        uses: yc-actions/yc-sls-container-deploy@v4
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          container-name: tgapp-backend
+          folder-id: ${{ secrets.YC_FOLDER_ID }}
+          revision-image-url: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          revision-cores: 1
+          revision-memory: 512Mb
+          revision-concurrency: 8
+          revision-execution-timeout: 30s
+
+  # ── Деплой frontend ───────────────────────────────
+  deploy-frontend:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+        env:
+          VITE_API_URL: ${{ secrets.BACKEND_URL }}
+
+      # Получаем IAM токен
+      - name: Get IAM token
+        id: iam
+        uses: yc-actions/yc-iam-token-fed@v1
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+
+      # Загрузка в Object Storage через AWS CLI (S3-совместимый API)
+      - name: Deploy frontend to Object Storage
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_SA_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SA_SECRET_KEY }}
+          AWS_DEFAULT_REGION: ru-central1
+        run: |
+          aws s3 sync frontend/dist/ s3://${{ secrets.YC_FRONTEND_BUCKET }} \
+            --endpoint-url https://storage.yandexcloud.net \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html"
+
+          # index.html без кэша (SPA)
+          aws s3 cp frontend/dist/index.html s3://${{ secrets.YC_FRONTEND_BUCKET }}/index.html \
+            --endpoint-url https://storage.yandexcloud.net \
+            --cache-control "no-cache, no-store, must-revalidate"

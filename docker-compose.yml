@@ -1,0 +1,80 @@
+version: '3.9'
+
+services:
+  # ── PostgreSQL 16 ──────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: tgapp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tgapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Valkey (Redis-совместимый) ─────────────────────
+  redis:
+    image: valkey/valkey:8-alpine
+    container_name: tgapp-valkey
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend (dev mode с hot-reload) ────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: tgapp-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tgapp
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+    volumes:
+      - ./backend/src:/app/src        # hot-reload исходников
+      - ./backend/migrations:/app/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Frontend (Vite dev server) ─────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tgapp-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000
+    volumes:
+      - ./frontend/src:/app/src        # hot-reload исходников
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  valkeydata:
