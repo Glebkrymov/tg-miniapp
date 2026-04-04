@@ -3,13 +3,13 @@
 resource "yandex_mdb_redis_cluster" "tgapp" {
   name        = "${var.project_name}-valkey"
   environment = "PRODUCTION"
-  network_id  = yandex_vpc_network.main.id
+  network_id  = data.yandex_vpc_network.default.id
 
   config {
-    version  = "7.2"
+    version  = "7.2-valkey"
     password = var.valkey_password
 
-    maxmemory_policy = "allkeys-lru"
+    maxmemory_policy = "ALLKEYS_LRU"
   }
 
   resources {
@@ -20,6 +20,6 @@ resource "yandex_mdb_redis_cluster" "tgapp" {
 
   host {
     zone      = var.yc_zone
-    subnet_id = yandex_vpc_subnet.main.id
+    subnet_id = data.yandex_vpc_subnet.main.id
   }
 }

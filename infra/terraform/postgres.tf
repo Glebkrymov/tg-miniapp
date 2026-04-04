@@ -3,7 +3,7 @@
 resource "yandex_mdb_postgresql_cluster" "tgapp" {
   name        = "${var.project_name}-postgres"
   environment = "PRODUCTION"
-  network_id  = yandex_vpc_network.main.id
+  network_id  = data.yandex_vpc_network.default.id
 
   config {
     version = "16"
@@ -24,7 +24,7 @@ resource "yandex_mdb_postgresql_cluster" "tgapp" {
 
   host {
     zone      = var.yc_zone
-    subnet_id = yandex_vpc_subnet.main.id
+    subnet_id = data.yandex_vpc_subnet.main.id
   }
 }
 
@@ -46,8 +46,4 @@ resource "yandex_mdb_postgresql_user" "tgapp" {
   cluster_id = yandex_mdb_postgresql_cluster.tgapp.id
   name       = "tgapp"
   password   = var.pg_password
-
-  permission {
-    database_name = "tgapp"
-  }
 }
