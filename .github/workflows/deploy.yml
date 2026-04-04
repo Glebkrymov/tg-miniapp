@@ -41,9 +41,9 @@ jobs:
       # Получаем IAM токен из SA JSON
       - name: Get IAM token
         id: iam
-        uses: yc-actions/yc-iam-token-fed@v1
+        uses: yc-actions/yc-iam-token@v1
         with:
-          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          yc-sa-json-credentials: ${{ secrets.YC_SA_KEY_JSON }}
 
       # Логин в Container Registry
       - name: Docker login to cr.yandex
@@ -69,7 +69,7 @@ jobs:
       - name: Deploy backend to Serverless Container
         uses: yc-actions/yc-sls-container-deploy@v4
         with:
-          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          yc-sa-json-credentials: ${{ secrets.YC_SA_KEY_JSON }}
           container-name: tgapp-backend
           folder-id: ${{ secrets.YC_FOLDER_ID }}
           revision-image-url: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
@@ -98,13 +98,6 @@ jobs:
         run: cd frontend && npm run build
         env:
           VITE_API_URL: ${{ secrets.BACKEND_URL }}
-
-      # Получаем IAM токен
-      - name: Get IAM token
-        id: iam
-        uses: yc-actions/yc-iam-token-fed@v1
-        with:
-          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
 
       # Загрузка в Object Storage через AWS CLI (S3-совместимый API)
       - name: Deploy frontend to Object Storage
