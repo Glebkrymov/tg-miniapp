@@ -12,6 +12,7 @@ import paymentsRouter from './routes/payments';
 import referralsRouter from './routes/referrals';
 import promoRouter from './routes/promo';
 import userRouter from './routes/user';
+import tasksRouter from './routes/tasks';
 import { apiRateLimit, generateRateLimit } from './middleware/rateLimit';
 import { startPolling } from './services/queue';
 import { checkConnection as checkDb, pool } from './config/db';
@@ -84,7 +85,7 @@ app.use('/webhook', webhookRouter);
 
 // ── API роуты ───────────────────────────────────────
 app.use('/api/generate', apiRateLimit as any, generateRateLimit as any, generateRouter);
-app.use('/api/tasks', apiRateLimit as any, generateRouter);
+app.use('/api/tasks', apiRateLimit as any, tasksRouter);
 app.use('/api/payments', apiRateLimit as any, paymentsRouter);
 app.use('/api/referrals', apiRateLimit as any, referralsRouter);
 app.use('/api/promo', apiRateLimit as any, promoRouter);

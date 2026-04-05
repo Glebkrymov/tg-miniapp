@@ -61,7 +61,7 @@ const Generate: React.FC = () => {
       params.vocal_type = vocalType;
     }
 
-    const taskId = await submitTask(model.model_id, prompt.trim(), params);
+    const taskId = await submitTask(model.model_id, prompt.trim(), params, model.category);
     if (taskId) {
       setPage('progress');
     }

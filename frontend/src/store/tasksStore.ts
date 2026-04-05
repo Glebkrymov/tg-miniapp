@@ -27,7 +27,7 @@ interface TasksState {
   fetchTask: (taskId: number) => Promise<void>;
 
   /** Отправить задачу на генерацию */
-  submitTask: (model: string, prompt: string, params?: Record<string, unknown>) => Promise<number | null>;
+  submitTask: (model: string, prompt: string, params?: Record<string, unknown>, category?: Task['category']) => Promise<number | null>;
 
   setCurrentTask: (task: Task | null) => void;
 }
@@ -66,14 +66,29 @@ export const useTasksStore = create<TasksState>((set, _get) => ({
     }
   },
 
-  submitTask: async (model, prompt, params = {}) => {
+  submitTask: async (model, prompt, params = {}, category = 'image' as Task['category']) => {
     set({ loading: true });
     try {
       const res = await apiClient.post('/api/generate', { model, prompt, params });
       if (res.data.success) {
-        const taskId = res.data.data.task_id;
-        set({ loading: false });
-        return taskId;
+        const { task_id, status, credits_reserved } = res.data.data;
+
+        // Устанавливаем currentTask, чтобы Progress страница сразу могла его отображать
+        const newTask: Task = {
+          id: task_id,
+          model_id: model,
+          category,
+          prompt,
+          status: status || 'pending',
+          result_url: null,
+          credits_cost: credits_reserved || 0,
+          error_message: null,
+          created_at: new Date().toISOString(),
+          completed_at: null,
+        };
+
+        set({ loading: false, currentTask: newTask });
+        return task_id;
       }
       set({ loading: false });
       return null;
