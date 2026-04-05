@@ -4,6 +4,7 @@ import { logger } from '../config/logger';
 import { poyoClient, TaskStatus } from './poyo';
 import * as credits from './credits';
 import { bot } from '../bot';
+import { alertGenerationFailed, alertGenerationSuccess } from './alert';
 
 const TASK_TTL = 25 * 60 * 60; // 25 часов в секундах
 const POLL_INTERVAL_MS = 3_000; // 3 секунды
@@ -89,6 +90,16 @@ export async function handleTaskResult(
         await notifyUser(telegramId, category, resultUrl);
       }
 
+      // Алерт администратору
+      await alertGenerationSuccess({
+        taskId,
+        userId,
+        telegramId,
+        model: taskData.model,
+        category,
+        credits: creditsReserved,
+      });
+
       logger.info('Задача завершена успешно', { poyoTaskId, taskId, userId });
     } else {
       // Ошибка генерации
@@ -106,6 +117,17 @@ export async function handleTaskResult(
         telegramId,
         `❌ Генерация не удалась.\n\n${errorMessage || 'Попробуйте позже.'}\n\n💰 ${creditsReserved} кредитов возвращены на баланс.`
       );
+
+      // Алерт администратору
+      await alertGenerationFailed({
+        taskId,
+        userId,
+        telegramId,
+        model: taskData.model,
+        category,
+        credits: creditsReserved,
+        error: errorMessage,
+      });
 
       logger.info('Задача завершена с ошибкой', { poyoTaskId, taskId, errorMessage });
     }

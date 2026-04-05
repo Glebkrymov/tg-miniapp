@@ -6,6 +6,7 @@ import { createPayment, verifyWebhookPayment } from '../services/yookassa';
 import { addCredits } from '../services/credits';
 import { query } from '../config/db';
 import { logger } from '../config/logger';
+import { alertPaymentSucceeded, alertPaymentCanceled } from '../services/alert';
 
 const router = Router();
 
@@ -127,10 +128,30 @@ router.post('/webhook', async (req: Request, res: Response) => {
     if (event === 'payment.succeeded' && paymentObject.paid) {
       await processSuccessfulPayment(paymentObject.id);
     } else if (event === 'payment.canceled') {
+      // Получаем данные платежа из БД для алерта
+      const canceledPayment = await query<{
+        user_id: number;
+        package_id: string;
+        amount_rub: number;
+      }>(
+        'SELECT user_id, package_id, amount_rub FROM payments WHERE yookassa_payment_id = $1',
+        [paymentObject.id]
+      );
+
       await query(
         `UPDATE payments SET status = 'canceled', updated_at = NOW() WHERE yookassa_payment_id = $1`,
         [paymentObject.id]
       );
+
+      // Алерт администратору об отклонённом платеже
+      const cp = canceledPayment.rows[0];
+      await alertPaymentCanceled({
+        yookassaPaymentId: paymentObject.id,
+        userId: cp?.user_id,
+        packageId: cp?.package_id,
+        amountRub: cp?.amount_rub,
+      });
+
       logger.info('Платёж отменён', { paymentId: paymentObject.id });
     }
 
@@ -186,6 +207,17 @@ async function processSuccessfulPayment(yookassaPaymentId: string): Promise<void
     `UPDATE payments SET status = 'succeeded', updated_at = NOW() WHERE yookassa_payment_id = $1`,
     [yookassaPaymentId]
   );
+
+  // Алерт администратору об успешной оплате
+  const pkg = getPackage(dbPayment.package_id);
+  await alertPaymentSucceeded({
+    yookassaPaymentId,
+    userId: dbPayment.user_id,
+    packageId: dbPayment.package_id,
+    packageName: pkg?.name ?? dbPayment.package_id,
+    credits: dbPayment.credits,
+    amountRub: pkg?.priceRub ?? 0,
+  });
 
   logger.info('Платёж обработан, кредиты начислены', {
     yookassaPaymentId,
