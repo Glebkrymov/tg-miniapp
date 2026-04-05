@@ -15,6 +15,8 @@ interface CreatePaymentParams {
   returnUrl: string;
   /** Метаданные (userId, packageId, credits) */
   metadata: Record<string, string | number>;
+  /** Email покупателя для чека (опционально) */
+  customerEmail?: string;
 }
 
 interface YooKassaPayment {
@@ -45,6 +47,24 @@ export async function createPayment(params: CreatePaymentParams): Promise<{ paym
     },
     description: params.description,
     metadata: params.metadata,
+    receipt: {
+      customer: {
+        email: params.customerEmail || 'noreply@poyo-ai.ru',
+      },
+      items: [
+        {
+          description: params.description.slice(0, 128),
+          quantity: '1.00',
+          amount: {
+            value: params.amount.toFixed(2),
+            currency: 'RUB',
+          },
+          vat_code: 1, // без НДС
+          payment_subject: 'service',
+          payment_mode: 'full_payment',
+        },
+      ],
+    },
   };
 
   logger.info('YooKassa запрос', {
