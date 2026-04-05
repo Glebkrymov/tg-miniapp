@@ -72,8 +72,9 @@ export async function handleTaskResult(
 
   try {
     if (status === 'finished' && files && files.length > 0) {
-      // Обновляем задачу в БД
-      const resultUrl = files[0].file_url;
+      // Обновляем задачу в БД — поддержка разных форматов файлов (image/video: file_url, music: audio_url)
+      const firstFile = files[0];
+      const resultUrl = firstFile.file_url || firstFile.audio_url || firstFile.video_url || firstFile.url;
       await query(
         `UPDATE tasks SET status = 'finished', result_url = $1, completed_at = NOW()
          WHERE id = $2`,
@@ -184,9 +185,9 @@ export function stopPolling(): void {
  * Проверить все незавершённые задачи старше 5 минут.
  */
 async function pollPendingTasks(): Promise<void> {
-  // Ищем все задачи со статусом pending/processing
-  const result = await query<{ id: number; poyo_task_id: string }>(
-    `SELECT id, poyo_task_id FROM tasks
+  // Ищем все задачи со статусом pending/processing (включая category для выбора endpoint)
+  const result = await query<{ id: number; poyo_task_id: string; category: string }>(
+    `SELECT id, poyo_task_id, category FROM tasks
      WHERE status IN ('pending', 'processing')
        AND poyo_task_id NOT LIKE 'pending_%'
      ORDER BY created_at ASC
@@ -195,7 +196,10 @@ async function pollPendingTasks(): Promise<void> {
 
   for (const task of result.rows) {
     try {
-      const statusData: TaskStatus = await poyoClient.getStatus(task.poyo_task_id);
+      // Для музыкальных задач используем отдельный endpoint PoYo
+      const statusData: TaskStatus = task.category === 'music'
+        ? await poyoClient.getMusicStatus(task.poyo_task_id)
+        : await poyoClient.getStatus(task.poyo_task_id);
 
       if (statusData.status === 'processing') {
         // Обновляем статус в БД

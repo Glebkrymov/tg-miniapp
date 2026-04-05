@@ -121,6 +121,60 @@ class PoyoClient {
   }
 
   /**
+   * Получить статус музыкальной задачи (отдельный endpoint PoYo).
+   */
+  async getMusicStatus(taskId: string): Promise<TaskStatus> {
+    const start = Date.now();
+
+    try {
+      const body = await this.requestWithRetry<Record<string, unknown>>(
+        'GET',
+        `/api/generate/detail/music/${taskId}`
+      );
+
+      logger.info('PoYo: сырой ответ music status', { body: JSON.stringify(body).slice(0, 500) });
+
+      const data = (body as any).data || body;
+
+      // Music files приходят как { audio_url, audio_id, image_url, title, ... }
+      const rawFiles = data.files || data.output?.files;
+      const files = rawFiles?.map((f: any) => ({
+        file_url: f.audio_url || f.file_url || f.url,
+        audio_url: f.audio_url,
+        image_url: f.image_url,
+        file_type: 'audio' as const,
+        title: f.title,
+        duration: f.duration,
+      }));
+
+      const result: TaskStatus = {
+        task_id: data.task_id || taskId,
+        status: data.status || 'processing',
+        files,
+        error: data.error || data.error_message || data.message,
+      };
+
+      const latency = Date.now() - start;
+      logger.info('PoYo: music статус получен', {
+        taskId,
+        status: result.status,
+        filesCount: files?.length,
+        latencyMs: latency,
+      });
+
+      return result;
+    } catch (err) {
+      const latency = Date.now() - start;
+      logger.error('PoYo: ошибка получения music статуса', {
+        taskId,
+        latencyMs: latency,
+        error: (err as Error).message,
+      });
+      throw err;
+    }
+  }
+
+  /**
    * HTTP запрос с retry на 5xx ошибки.
    * На 4xx — не ретраим, бросаем сразу.
    */
