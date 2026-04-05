@@ -33,32 +33,54 @@ interface YooKassaPayment {
 export async function createPayment(params: CreatePaymentParams): Promise<{ paymentId: string; confirmationUrl: string }> {
   const idempotenceKey = crypto.randomUUID();
 
-  const response = await axios.post<YooKassaPayment>(
-    `${YOOKASSA_API_URL}/payments`,
-    {
-      amount: {
-        value: params.amount.toFixed(2),
-        currency: 'RUB',
-      },
-      capture: true, // автоматическое подтверждение
-      confirmation: {
-        type: 'redirect',
-        return_url: params.returnUrl,
-      },
-      description: params.description,
-      metadata: params.metadata,
+  const payload = {
+    amount: {
+      value: params.amount.toFixed(2),
+      currency: 'RUB',
     },
-    {
-      auth: {
-        username: YOOKASSA_SHOP_ID,
-        password: YOOKASSA_SECRET_KEY,
-      },
-      headers: {
-        'Idempotence-Key': idempotenceKey,
-        'Content-Type': 'application/json',
-      },
+    capture: true, // автоматическое подтверждение
+    confirmation: {
+      type: 'redirect',
+      return_url: params.returnUrl,
+    },
+    description: params.description,
+    metadata: params.metadata,
+  };
+
+  logger.info('YooKassa запрос', {
+    shopId: YOOKASSA_SHOP_ID,
+    returnUrl: params.returnUrl,
+    amount: params.amount,
+  });
+
+  let response: { data: YooKassaPayment };
+  try {
+    response = await axios.post<YooKassaPayment>(
+      `${YOOKASSA_API_URL}/payments`,
+      payload,
+      {
+        auth: {
+          username: YOOKASSA_SHOP_ID,
+          password: YOOKASSA_SECRET_KEY,
+        },
+        headers: {
+          'Idempotence-Key': idempotenceKey,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+  } catch (err: any) {
+    // Логируем полный ответ YooKassa при ошибке
+    if (err.response) {
+      logger.error('YooKassa API ошибка', {
+        status: err.response.status,
+        data: JSON.stringify(err.response.data),
+        returnUrl: params.returnUrl,
+        shopId: YOOKASSA_SHOP_ID,
+      });
     }
-  );
+    throw err;
+  }
 
   const payment = response.data;
 
