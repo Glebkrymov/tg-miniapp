@@ -1,0 +1,166 @@
+name: Monitor TG Mini App
+
+on:
+  schedule:
+    # Каждые 30 минут
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Verbose output'
+        required: false
+        default: 'false'
+
+env:
+  HEALTH_URL: https://d5dvg4e13p8puqjqse6p.fary004x.apigw.yandexcloud.net/health
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── 1. Health Check ───────────────────────────────────
+      - name: Health Check
+        id: health
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 10 "$HEALTH_URL" || echo "000")
+          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            DB=$(jq -r '.db // "unknown"' /tmp/health.json)
+            REDIS=$(jq -r '.redis // "unknown"' /tmp/health.json)
+            UPTIME=$(jq -r '.uptime // "unknown"' /tmp/health.json)
+            VERSION=$(jq -r '.version // "unknown"' /tmp/health.json)
+            echo "status=OK" >> $GITHUB_OUTPUT
+            echo "db=$DB" >> $GITHUB_OUTPUT
+            echo "redis=$REDIS" >> $GITHUB_OUTPUT
+            echo "uptime=$UPTIME" >> $GITHUB_OUTPUT
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "status=ERROR" >> $GITHUB_OUTPUT
+            echo "db=unknown" >> $GITHUB_OUTPUT
+            echo "redis=unknown" >> $GITHUB_OUTPUT
+            echo "uptime=0" >> $GITHUB_OUTPUT
+            echo "version=unknown" >> $GITHUB_OUTPUT
+          fi
+
+          echo "=== Health response ==="
+          cat /tmp/health.json || echo "(empty)"
+
+      # ── 2. Последние деплои ───────────────────────────────
+      - name: Get last deploy status
+        id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Последний завершённый деплой (workflow deploy.yml)
+          RUN=$(gh run list \
+            --workflow deploy.yml \
+            --repo ${{ github.repository }} \
+            --limit 1 \
+            --json status,conclusion,createdAt,displayTitle \
+            --jq '.[0]')
+
+          if [ -z "$RUN" ] || [ "$RUN" = "null" ]; then
+            echo "conclusion=unknown" >> $GITHUB_OUTPUT
+            echo "created_at=unknown" >> $GITHUB_OUTPUT
+            echo "title=unknown" >> $GITHUB_OUTPUT
+          else
+            CONCLUSION=$(echo "$RUN" | jq -r '.conclusion // "in_progress"')
+            CREATED=$(echo "$RUN" | jq -r '.createdAt // "unknown"')
+            TITLE=$(echo "$RUN" | jq -r '.displayTitle // "unknown"')
+            echo "conclusion=$CONCLUSION" >> $GITHUB_OUTPUT
+            echo "created_at=$CREATED" >> $GITHUB_OUTPUT
+            echo "title=$TITLE" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 3. Форматируем и отправляем отчёт ────────────────
+      - name: Send Telegram report
+        env:
+          ALERT_BOT_TOKEN: ${{ secrets.ALERT_BOT_TOKEN }}
+          ALERT_CHAT_ID: ${{ secrets.ALERT_CHAT_ID }}
+          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+          HTTP_CODE: ${{ steps.health.outputs.http_code }}
+          DB: ${{ steps.health.outputs.db }}
+          REDIS: ${{ steps.health.outputs.redis }}
+          UPTIME: ${{ steps.health.outputs.uptime }}
+          VERSION: ${{ steps.health.outputs.version }}
+          DEPLOY_CONCLUSION: ${{ steps.deploy.outputs.conclusion }}
+          DEPLOY_CREATED: ${{ steps.deploy.outputs.created_at }}
+          DEPLOY_TITLE: ${{ steps.deploy.outputs.title }}
+        run: |
+          NOW=$(date '+%Y-%m-%d %H:%M UTC')
+
+          # Иконки
+          if [ "$HEALTH_STATUS" = "OK" ]; then
+            HEALTH_ICON="✅"
+          else
+            HEALTH_ICON="🔴"
+          fi
+
+          if [ "$DB" = "ok" ]; then DB_ICON="✅"; else DB_ICON="🔴"; fi
+          if [ "$REDIS" = "ok" ]; then REDIS_ICON="✅"; else REDIS_ICON="🔴"; fi
+
+          case "$DEPLOY_CONCLUSION" in
+            success)    DEPLOY_ICON="✅" ;;
+            failure)    DEPLOY_ICON="❌" ;;
+            in_progress) DEPLOY_ICON="🔄" ;;
+            *)          DEPLOY_ICON="❓" ;;
+          esac
+
+          # Отправлять в Telegram только если есть проблема,
+          # либо всегда — управляется переменной ALWAYS_NOTIFY.
+          # Сейчас: отправляем всегда (можно поменять на условие ошибки).
+          MESSAGE="<b>📊 Мониторинг PoYo TG Mini App</b>
+          ⏰ ${NOW}
+
+          <b>🏥 Сервис:</b> ${HEALTH_ICON} ${HEALTH_STATUS} (HTTP ${HTTP_CODE})
+          <b>🗄 БД:</b> ${DB_ICON} ${DB}
+          <b>📦 Redis:</b> ${REDIS_ICON} ${REDIS}
+          <b>⬆️ Uptime:</b> ${UPTIME} сек
+          <b>🔖 Версия:</b> ${VERSION}
+
+          <b>🚀 Последний деплой:</b> ${DEPLOY_ICON} ${DEPLOY_CONCLUSION}
+          <b>📝 Коммит:</b> <code>${DEPLOY_TITLE}</code>
+          <b>🕐 Дата деплоя:</b> ${DEPLOY_CREATED}"
+
+          # Удаляем лишние отступы из heredoc
+          MESSAGE=$(echo "$MESSAGE" | sed 's/^          //')
+
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${ALERT_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"chat_id\": \"${ALERT_CHAT_ID}\",
+              \"text\": $(echo "$MESSAGE" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))'),
+              \"parse_mode\": \"HTML\"
+            }")
+
+          echo "Telegram response: $RESPONSE"
+
+          OK=$(echo "$RESPONSE" | jq -r '.ok')
+          if [ "$OK" != "true" ]; then
+            echo "❌ Telegram send FAILED"
+            exit 1
+          else
+            echo "✅ Telegram send OK"
+          fi
+
+      # ── 4. Уведомление при падении самого workflow ────────
+      - name: Notify on workflow failure
+        if: failure()
+        env:
+          ALERT_BOT_TOKEN: ${{ secrets.ALERT_BOT_TOKEN }}
+          ALERT_CHAT_ID: ${{ secrets.ALERT_CHAT_ID }}
+        run: |
+          MESSAGE="🚨 <b>Ошибка мониторинга!</b>
+          Workflow monitor.yml упал.
+          Проверь: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -s -X POST "https://api.telegram.org/bot${ALERT_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"chat_id\": \"${ALERT_CHAT_ID}\",
+              \"text\": $(echo "$MESSAGE" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))'),
+              \"parse_mode\": \"HTML\"
+            }"
