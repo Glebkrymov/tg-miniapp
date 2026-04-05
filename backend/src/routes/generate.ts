@@ -110,9 +110,9 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    // 6. Обновляем poyo_task_id в задаче
+    // 6. Обновляем poyo_task_id и статус в задаче
     await query(
-      'UPDATE tasks SET poyo_task_id = $1 WHERE id = $2',
+      "UPDATE tasks SET poyo_task_id = $1, status = 'processing' WHERE id = $2",
       [poyoTaskId, taskId]
     );
 

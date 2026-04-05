@@ -184,11 +184,11 @@ export function stopPolling(): void {
  * Проверить все незавершённые задачи старше 5 минут.
  */
 async function pollPendingTasks(): Promise<void> {
-  // Ищем задачи со статусом pending/processing, созданные более 5 минут назад
+  // Ищем все задачи со статусом pending/processing
   const result = await query<{ id: number; poyo_task_id: string }>(
     `SELECT id, poyo_task_id FROM tasks
      WHERE status IN ('pending', 'processing')
-       AND created_at < NOW() - INTERVAL '5 minutes'
+       AND poyo_task_id NOT LIKE 'pending_%'
      ORDER BY created_at ASC
      LIMIT 10`
   );
