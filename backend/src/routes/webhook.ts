@@ -10,19 +10,25 @@ const router = Router();
  */
 router.post('/poyo', async (req: Request, res: Response) => {
   try {
-    const { task_id, status, files, error } = req.body as {
-      task_id: string;
-      status: string;
-      files?: { file_url: string; file_type: string }[];
-      error?: string;
-    };
+    // Логируем полное тело webhook для отладки
+    logger.info('Webhook от PoYo: сырые данные', {
+      body: JSON.stringify(req.body).slice(0, 1000),
+    });
+
+    // Поддержка разных форматов: плоский или вложенный в data
+    const payload = req.body.data || req.body;
+    const task_id = payload.task_id || payload.id;
+    const status = payload.status;
+    const files = payload.files || payload.output?.files;
+    const error = payload.error || payload.message;
 
     if (!task_id || !status) {
+      logger.warn('Webhook: отсутствует task_id или status', { body: JSON.stringify(req.body).slice(0, 500) });
       res.status(400).json({ success: false, error: 'Отсутствует task_id или status' });
       return;
     }
 
-    logger.info('Webhook от PoYo', { task_id, status });
+    logger.info('Webhook от PoYo', { task_id, status, hasFiles: !!files });
 
     if (status === 'finished' || status === 'failed') {
       await handleTaskResult(

@@ -8,23 +8,12 @@ export interface PoyoFile {
   file_type: 'image' | 'video' | 'audio';
 }
 
-export interface PoyoSubmitResponse {
-  data: {
-    task_id: string;
-    status: string;
-  };
+export interface TaskStatus {
+  task_id: string;
+  status: 'not_started' | 'processing' | 'finished' | 'failed';
+  files?: PoyoFile[];
+  error?: string;
 }
-
-export interface PoyoStatusResponse {
-  data: {
-    task_id: string;
-    status: 'not_started' | 'processing' | 'finished' | 'failed';
-    files?: PoyoFile[];
-    error?: string;
-  };
-}
-
-export type TaskStatus = PoyoStatusResponse['data'];
 
 // ── PoYo API клиент ─────────────────────────────────
 
@@ -57,15 +46,24 @@ class PoyoClient {
     const start = Date.now();
 
     try {
-      const response = await this.requestWithRetry<PoyoSubmitResponse>('POST', '/api/generate/submit', {
+      const body = await this.requestWithRetry<Record<string, unknown>>('POST', '/api/generate/submit', {
         model,
         callback_url: callbackUrl,
         input,
       });
 
-      const taskId = response.data.task_id;
-      const latency = Date.now() - start;
+      logger.info('PoYo: сырой ответ submit', { body: JSON.stringify(body).slice(0, 500) });
 
+      // Поддержка разных форматов ответа: { task_id } или { data: { task_id } }
+      const taskId = (body as any).task_id
+        || (body as any).data?.task_id
+        || (body as any).id;
+
+      if (!taskId) {
+        throw new Error(`PoYo: task_id не найден в ответе: ${JSON.stringify(body).slice(0, 300)}`);
+      }
+
+      const latency = Date.now() - start;
       logger.info('PoYo: задача отправлена', { model, taskId, latencyMs: latency });
       return taskId;
     } catch (err) {
@@ -86,19 +84,31 @@ class PoyoClient {
     const start = Date.now();
 
     try {
-      const response = await this.requestWithRetry<PoyoStatusResponse>(
+      const body = await this.requestWithRetry<Record<string, unknown>>(
         'GET',
         `/api/generate/status/${taskId}`
       );
 
+      logger.debug('PoYo: сырой ответ status', { body: JSON.stringify(body).slice(0, 500) });
+
+      // Поддержка разных форматов: { status, files } или { data: { status, files } }
+      const data = (body as any).data || body;
+
+      const result: TaskStatus = {
+        task_id: data.task_id || taskId,
+        status: data.status || 'processing',
+        files: data.files || data.output?.files,
+        error: data.error || data.message,
+      };
+
       const latency = Date.now() - start;
       logger.info('PoYo: статус получен', {
         taskId,
-        status: response.data.status,
+        status: result.status,
         latencyMs: latency,
       });
 
-      return response.data;
+      return result;
     } catch (err) {
       const latency = Date.now() - start;
       logger.error('PoYo: ошибка получения статуса', {
@@ -131,9 +141,17 @@ class PoyoClient {
       } catch (err: unknown) {
         lastError = err as Error;
 
-        // axios ошибка с response
-        const axiosErr = err as { response?: { status: number } };
+        // Логируем полный ответ ошибки
+        const axiosErr = err as { response?: { status: number; data?: unknown } };
         const status = axiosErr.response?.status;
+
+        if (axiosErr.response?.data) {
+          logger.error('PoYo: ответ ошибки', {
+            url,
+            status,
+            responseData: JSON.stringify(axiosErr.response.data).slice(0, 500),
+          });
+        }
 
         // 4xx — не ретраим
         if (status && status >= 400 && status < 500) {
