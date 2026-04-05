@@ -98,6 +98,8 @@ jobs:
             --concurrency 8 \
             --execution-timeout 30s \
             --service-account-id $YC_SERVICE_ACCOUNT_ID \
+            --network-id enps35h0ekl8m5810jmv \
+            --environment WEBHOOK_BASE_URL=${{ env.BACKEND_URL }} \
             --secret environment-variable=BOT_TOKEN,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=BOT_TOKEN \
             --secret environment-variable=POYO_API_KEY,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=POYO_API_KEY \
             --secret environment-variable=DATABASE_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=DATABASE_URL \
