@@ -18,24 +18,14 @@ provider "yandex" {
   zone      = var.yc_zone
 }
 
-# ── Сеть ─────────────────────────────────────────────
+# ── Сеть (используем существующую default) ───────────
 
-resource "yandex_vpc_network" "main" {
-  name = "${var.project_name}-network"
+data "yandex_vpc_network" "default" {
+  name = "default"
 }
 
-resource "yandex_vpc_subnet" "main" {
-  name           = "${var.project_name}-subnet-a"
-  zone           = var.yc_zone
-  network_id     = yandex_vpc_network.main.id
-  v4_cidr_blocks = ["10.1.0.0/24"]
-}
-
-resource "yandex_vpc_subnet" "b" {
-  name           = "${var.project_name}-subnet-b"
-  zone           = "ru-central1-b"
-  network_id     = yandex_vpc_network.main.id
-  v4_cidr_blocks = ["10.2.0.0/24"]
+data "yandex_vpc_subnet" "main" {
+  name = "default-ru-central1-a"
 }
 
 # ── Сервисный аккаунт ────────────────────────────────

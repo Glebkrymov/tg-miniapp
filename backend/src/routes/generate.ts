@@ -6,6 +6,7 @@ import { query } from '../config/db';
 import { poyoClient } from '../services/poyo';
 import * as credits from '../services/credits';
 import { enqueueTask } from '../services/queue';
+import { tryUseFreeGeneration } from '../services/promo';
 import { logger } from '../config/logger';
 
 const router = Router();
@@ -63,18 +64,31 @@ router.post('/', async (req: Request, res: Response) => {
 
     const taskId = taskResult.rows[0].id;
 
-    // 4. Резервируем кредиты
+    // 4. Проверяем бесплатную генерацию по промокоду
+    let isFreeGeneration = false;
     try {
-      await credits.reserve(user.id, creditsCost, taskId);
-    } catch (err) {
-      // Удаляем задачу при недостаточном балансе
-      await query('DELETE FROM tasks WHERE id = $1', [taskId]);
+      isFreeGeneration = await tryUseFreeGeneration(user.id, modelId, model.category);
+    } catch {
+      // Ошибка промо — не критично, продолжаем с обычной оплатой
+    }
 
-      if (err instanceof credits.InsufficientCreditsError) {
-        res.status(402).json({ success: false, error: err.message });
-        return;
+    // 5. Резервируем кредиты (если не бесплатная генерация)
+    if (!isFreeGeneration) {
+      try {
+        await credits.reserve(user.id, creditsCost, taskId);
+      } catch (err) {
+        // Удаляем задачу при недостаточном балансе
+        await query('DELETE FROM tasks WHERE id = $1', [taskId]);
+
+        if (err instanceof credits.InsufficientCreditsError) {
+          res.status(402).json({ success: false, error: err.message });
+          return;
+        }
+        throw err;
       }
-      throw err;
+    } else {
+      // Обновляем стоимость на 0 для бесплатной генерации
+      await query('UPDATE tasks SET credits_cost = 0 WHERE id = $1', [taskId]);
     }
 
     // 5. Отправляем в PoYo API
@@ -84,8 +98,10 @@ router.post('/', async (req: Request, res: Response) => {
     try {
       poyoTaskId = await poyoClient.submitTask(modelId, { prompt, ...params }, callbackUrl);
     } catch (err) {
-      // Возвращаем кредиты при ошибке отправки
-      await credits.refund(user.id, creditsCost, taskId);
+      // Возвращаем кредиты при ошибке отправки (если не бесплатная генерация)
+      if (!isFreeGeneration) {
+        await credits.refund(user.id, creditsCost, taskId);
+      }
       await query(
         "UPDATE tasks SET status = 'failed', error_message = $1 WHERE id = $2",
         [(err as Error).message, taskId]
@@ -100,12 +116,12 @@ router.post('/', async (req: Request, res: Response) => {
       [poyoTaskId, taskId]
     );
 
-    // 7. Сохраняем в Redis для обработки webhook
+    // 8. Сохраняем в Redis для обработки webhook
     await enqueueTask(poyoTaskId, {
       userId: user.id,
       taskId,
       model: modelId,
-      creditsReserved: creditsCost,
+      creditsReserved: isFreeGeneration ? 0 : creditsCost,
       telegramId: user.telegram_id,
       category: model.category,
       createdAt: Date.now(),

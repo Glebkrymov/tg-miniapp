@@ -103,7 +103,11 @@ jobs:
             --secret environment-variable=DATABASE_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=DATABASE_URL \
             --secret environment-variable=REDIS_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=REDIS_URL \
             --secret environment-variable=JWT_SECRET,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=JWT_SECRET \
-            --secret environment-variable=WEBAPP_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=WEBAPP_URL
+            --secret environment-variable=WEBAPP_URL,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=WEBAPP_URL \
+            --secret environment-variable=YOOKASSA_SHOP_ID,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=YOOKASSA_SHOP_ID \
+            --secret environment-variable=YOOKASSA_SECRET_KEY,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=YOOKASSA_SECRET_KEY \
+            --secret environment-variable=ALERT_BOT_TOKEN,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=ALERT_BOT_TOKEN \
+            --secret environment-variable=ALERT_CHAT_ID,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=ALERT_CHAT_ID
 
   # ── Деплой frontend ───────────────────────────────
   deploy-frontend:

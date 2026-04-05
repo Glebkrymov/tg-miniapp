@@ -96,101 +96,72 @@ bot.command('balance', async (ctx) => {
   }
 });
 
-// ── /help — список команд ───────────────────────────
-bot.command('help', async (ctx) => {
-  await ctx.reply(
-    `📋 Доступные команды:\n\n` +
-    `/start — запустить бота и открыть приложение\n` +
-    `/balance — проверить баланс кредитов\n` +
-    `/help — показать это сообщение\n\n` +
-    `Для генерации изображений, видео и музыки — откройте Mini App по кнопке ниже.`,
-    Markup.inlineKeyboard([
-      [Markup.button.webApp('🚀 Открыть приложение', WEBAPP_URL)],
-    ])
-  );
-});
-
-// ── Обработка платежей Telegram Stars ───────────────
-
-/**
- * pre_checkout_query — подтверждаем готовность принять платёж.
- * Всегда отвечаем ok: true.
- */
-bot.on('pre_checkout_query', async (ctx) => {
-  try {
-    await ctx.answerPreCheckoutQuery(true);
-    logger.info('pre_checkout_query подтверждён', {
-      queryId: ctx.preCheckoutQuery.id,
-      telegramId: ctx.from.id,
-    });
-  } catch (err) {
-    logger.error('Ошибка pre_checkout_query', { error: (err as Error).message });
-  }
-});
-
-/**
- * successful_payment — платёж прошёл успешно.
- * Начисляем кредиты пользователю.
- */
-bot.on('message', async (ctx, next) => {
-  const msg = ctx.message;
-
-  // Проверяем что это successful_payment
-  if (!('successful_payment' in msg)) {
-    return next();
-  }
-
-  const payment = msg.successful_payment;
+// ── /promo CODE — активация промокода ──────────────
+bot.command('promo', async (ctx) => {
   const telegramId = ctx.from.id;
+  const code = ctx.message.text.split(' ').slice(1).join(' ').trim();
+
+  if (!code) {
+    await ctx.reply('Использование: /promo КОД\n\nВведите промокод после команды.');
+    return;
+  }
 
   try {
-    // Парсим payload
-    const payload = JSON.parse(payment.invoice_payload) as {
-      package_id: string;
-      user_id: number;
-      credits: number;
-    };
-
-    const paymentChargeId = payment.telegram_payment_charge_id;
-
-    // Находим пользователя
     const userResult = await query<AppUser>(
       'SELECT * FROM users WHERE telegram_id = $1',
       [telegramId]
     );
 
     if (userResult.rows.length === 0) {
-      logger.error('Пользователь не найден при оплате', { telegramId });
+      await ctx.reply('Сначала нажмите /start для регистрации.');
       return;
     }
 
-    const user = userResult.rows[0];
+    const { activatePromoCode } = await import('../services/promo');
+    const result = await activatePromoCode(userResult.rows[0].id, code);
 
-    // Начисляем кредиты (импорт addCredits из credits сервиса)
-    const { addCredits } = await import('../services/credits');
-    await addCredits(user.id, payload.credits, 'purchase', paymentChargeId);
-
-    // Отправляем подтверждение
-    await ctx.reply(
-      `✅ Оплата прошла успешно!\n\n` +
-      `💰 Начислено: ${payload.credits} кредитов\n` +
-      `💳 ID платежа: ${paymentChargeId}`
-    );
-
-    logger.info('Платёж обработан', {
-      telegramId,
-      userId: user.id,
-      credits: payload.credits,
-      packageId: payload.package_id,
-      chargeId: paymentChargeId,
-    });
+    if (result.type === 'credits') {
+      await ctx.reply(
+        `✅ Промокод активирован!\n\n` +
+        `💰 Начислено: ${result.credits_added} кредитов` +
+        (result.description ? `\n📝 ${result.description}` : '')
+      );
+    } else {
+      const categoryName = result.allowed_category === 'video' ? 'видео' :
+        result.allowed_category === 'music' ? 'музыки' :
+        result.allowed_category === 'image' ? 'изображений' : 'любой категории';
+      await ctx.reply(
+        `✅ Промокод активирован!\n\n` +
+        `🎬 Бесплатных генераций: ${result.free_generations}\n` +
+        `📂 Категория: ${categoryName}` +
+        (result.description ? `\n📝 ${result.description}` : '')
+      );
+    }
   } catch (err) {
-    logger.error('Ошибка обработки платежа', {
-      telegramId,
-      error: (err as Error).message,
-    });
-    await ctx.reply('Произошла ошибка при начислении кредитов. Обратитесь в поддержку.');
+    const message = (err as Error).message;
+    if (['Промокод не найден', 'Промокод неактивен', 'Срок действия промокода истёк',
+         'Промокод больше не доступен', 'Вы уже использовали этот промокод'].includes(message)) {
+      await ctx.reply(`❌ ${message}`);
+    } else {
+      logger.error('Ошибка /promo', { error: message, telegramId });
+      await ctx.reply('Произошла ошибка. Попробуйте позже.');
+    }
   }
+});
+
+// ── /help — список команд ───────────────────────────
+bot.command('help', async (ctx) => {
+  await ctx.reply(
+    `📋 Доступные команды:\n\n` +
+    `/start — запустить бота и открыть приложение\n` +
+    `/balance — проверить баланс кредитов\n` +
+    `/promo КОД — активировать промокод\n` +
+    `/help — показать это сообщение\n\n` +
+    `Для генерации изображений, видео и музыки — откройте Mini App по кнопке ниже.`,
+    Markup.inlineKeyboard([
+      [Markup.button.webApp('🚀 Открыть приложение', WEBAPP_URL)],
+    ])
+  );
 });
 
 // ── Вспомогательные функции ─────────────────────────
