@@ -46,3 +46,6 @@ infra/terraform/terraform.tfvars
 # Разное
 *.tgz
 .cache/
+
+sa-key*.json
+infra/terraform/sa-key.json
