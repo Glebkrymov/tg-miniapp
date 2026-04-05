@@ -89,7 +89,7 @@ class PoyoClient {
         `/api/generate/status/${taskId}`
       );
 
-      logger.debug('PoYo: сырой ответ status', { body: JSON.stringify(body).slice(0, 500) });
+      logger.info('PoYo: сырой ответ status', { body: JSON.stringify(body).slice(0, 500) });
 
       // Поддержка разных форматов: { status, files } или { data: { status, files } }
       const data = (body as any).data || body;
