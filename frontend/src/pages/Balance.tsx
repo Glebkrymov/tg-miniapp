@@ -110,8 +110,9 @@ const Balance: React.FC = () => {
       if (res.data.success && res.data.data.confirmation_url) {
         const url = res.data.data.confirmation_url;
         // Используем Telegram WebApp API для открытия ссылки
-        if (window.Telegram?.WebApp?.openLink) {
-          window.Telegram.WebApp.openLink(url);
+        const tg = window.Telegram?.WebApp as any;
+        if (tg?.openLink) {
+          tg.openLink(url);
         } else {
           window.location.href = url;
         }
