@@ -4,8 +4,14 @@ import { logger } from '../config/logger';
 // ── Типы ответов PoYo API ───────────────────────────
 
 export interface PoyoFile {
-  file_url: string;
+  file_url?: string;
+  audio_url?: string;
+  video_url?: string;
+  url?: string;
+  image_url?: string;
   file_type: 'image' | 'video' | 'audio';
+  title?: string;
+  duration?: number;
 }
 
 export interface TaskStatus {

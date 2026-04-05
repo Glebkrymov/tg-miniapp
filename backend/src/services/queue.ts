@@ -58,7 +58,7 @@ export async function removeTask(poyoTaskId: string): Promise<void> {
 export async function handleTaskResult(
   poyoTaskId: string,
   status: 'finished' | 'failed',
-  files?: { file_url: string; file_type: string }[],
+  files?: { file_url?: string; audio_url?: string; video_url?: string; url?: string; file_type: string }[],
   errorMessage?: string
 ): Promise<void> {
   const taskData = await getQueuedTask(poyoTaskId);
@@ -74,7 +74,7 @@ export async function handleTaskResult(
     if (status === 'finished' && files && files.length > 0) {
       // Обновляем задачу в БД — поддержка разных форматов файлов (image/video: file_url, music: audio_url)
       const firstFile = files[0];
-      const resultUrl = firstFile.file_url || firstFile.audio_url || firstFile.video_url || firstFile.url;
+      const resultUrl = firstFile.file_url || firstFile.audio_url || firstFile.video_url || firstFile.url || '';
       await query(
         `UPDATE tasks SET status = 'finished', result_url = $1, completed_at = NOW()
          WHERE id = $2`,
@@ -85,7 +85,9 @@ export async function handleTaskResult(
       await credits.charge(userId, creditsReserved, taskId);
 
       // Уведомляем пользователя
-      await notifyUser(telegramId, category, resultUrl);
+      if (resultUrl) {
+        await notifyUser(telegramId, category, resultUrl);
+      }
 
       logger.info('Задача завершена успешно', { poyoTaskId, taskId, userId });
     } else {
