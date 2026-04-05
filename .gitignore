@@ -47,5 +47,6 @@ infra/terraform/terraform.tfvars
 *.tgz
 .cache/
 
+# Service account keys (секреты!)
 sa-key*.json
 infra/terraform/sa-key.json

@@ -4,9 +4,27 @@ import { logger } from './logger';
 /**
  * Пул подключений к PostgreSQL.
  * Строка подключения берётся из переменной окружения DATABASE_URL.
+ *
+ * YC Managed PostgreSQL использует самоподписанные сертификаты.
+ * Убираем ?ssl=true из URL (конфликтует с явным ssl объектом)
+ * и задаём ssl: { rejectUnauthorized: false } напрямую.
  */
+function buildConnectionString(): string | undefined {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) return undefined;
+  // Удаляем ssl-параметры из query string — будем задавать через объект ssl
+  try {
+    const url = new URL(raw);
+    url.searchParams.delete('ssl');
+    url.searchParams.delete('sslmode');
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: buildConnectionString(),
   max: 20,                    // максимум соединений в пуле
   idleTimeoutMillis: 30_000,  // закрывать неактивные через 30с
   connectionTimeoutMillis: 5_000,
