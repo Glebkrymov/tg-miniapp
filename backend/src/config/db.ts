@@ -10,6 +10,9 @@ export const pool = new Pool({
   max: 20,                    // максимум соединений в пуле
   idleTimeoutMillis: 30_000,  // закрывать неактивные через 30с
   connectionTimeoutMillis: 5_000,
+  ssl: process.env.NODE_ENV === 'production' || process.env.DATABASE_URL?.includes('yandexcloud')
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 // Логируем ошибки пула

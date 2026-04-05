@@ -5,12 +5,16 @@ import { logger } from './logger';
  * Подключение к Redis / Valkey.
  * Строка подключения из переменной окружения REDIS_URL.
  */
-export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const useTls = redisUrl.startsWith('rediss://');
+
+export const redis = new Redis(redisUrl, {
   maxRetriesPerRequest: 3,
   retryStrategy(times) {
     const delay = Math.min(times * 200, 5000);
     return delay;
   },
+  ...(useTls ? { tls: { rejectUnauthorized: false } } : {}),
 });
 
 redis.on('connect', () => {
