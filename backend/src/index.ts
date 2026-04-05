@@ -78,7 +78,7 @@ app.get('/health', async (_req, res) => {
 });
 
 // ── Telegram Bot webhook ────────────────────────────
-app.use('/webhook/telegram', bot.webhookCallback('/webhook/telegram'));
+app.use('/webhook/telegram', bot.webhookCallback('/'));
 
 // ── PoYo webhook ────────────────────────────────────
 app.use('/webhook', webhookRouter);
