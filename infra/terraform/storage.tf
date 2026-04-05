@@ -25,3 +25,35 @@ resource "yandex_storage_bucket" "frontend" {
     max_age_seconds = 3600
   }
 }
+
+# ── Object Storage: загрузки пользователей ────────────
+
+resource "yandex_storage_bucket" "uploads" {
+  bucket    = "${var.project_name}-uploads"
+  folder_id = var.yc_folder_id
+
+  # Публичный доступ на чтение — PoYo API скачивает файлы по URL
+  anonymous_access_flags {
+    read        = true
+    list        = false
+    config_read = false
+  }
+
+  # CORS для загрузки из браузера (presigned PUT)
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD", "PUT"]
+    allowed_origins = ["*"]
+    max_age_seconds = 3600
+  }
+
+  # Автоудаление загрузок через 24 часа
+  lifecycle_rule {
+    id      = "cleanup-uploads"
+    enabled = true
+
+    expiration {
+      days = 1
+    }
+  }
+}

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useUiStore } from '../store/uiStore';
 import { useUserStore } from '../store/userStore';
 import { useTasksStore } from '../store/tasksStore';
 import { getModelById } from '../constants/models';
+import { uploadFile } from '../api/upload';
 
 /** Компонент ползунка 0.00–1.00 */
 const Slider: React.FC<{
@@ -56,6 +57,86 @@ const ButtonGroup: React.FC<{
   </div>
 );
 
+/** Компонент загрузки файла (фото/видео) */
+const FileUploadInput: React.FC<{
+  label: string;
+  hint: string;
+  accept: string;
+  file: File | null;
+  previewUrl: string | null;
+  uploading: boolean;
+  uploadProgress: number;
+  onChange: (file: File | null) => void;
+  fileType: 'image' | 'video';
+}> = ({ label, hint, accept, file, previewUrl, uploading, uploadProgress, onChange, fileType }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="mb-4">
+      <div className="text-sm font-semibold text-tg-text mb-2">{label}</div>
+      <div className="text-xs text-tg-hint mb-2">{hint}</div>
+
+      {!file ? (
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="w-full border-2 border-dashed border-gray-300 rounded-xl p-6 text-center text-tg-hint hover:border-tg-link transition-colors"
+        >
+          <div className="text-2xl mb-1">{fileType === 'image' ? '\uD83D\uDDBC\uFE0F' : '\uD83C\uDFA5'}</div>
+          <div className="text-sm">Нажмите для выбора файла</div>
+        </button>
+      ) : (
+        <div className="relative bg-tg-secondary-bg rounded-xl p-3">
+          {/* Preview */}
+          {previewUrl && fileType === 'image' && (
+            <img src={previewUrl} alt="Preview" className="w-full h-32 object-cover rounded-lg mb-2" />
+          )}
+          {previewUrl && fileType === 'video' && (
+            <video src={previewUrl} className="w-full h-32 object-cover rounded-lg mb-2" muted />
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-tg-text truncate flex-1 mr-2">{file.name}</div>
+            {!uploading && (
+              <button
+                onClick={() => onChange(null)}
+                className="text-red-500 text-sm font-semibold shrink-0"
+              >
+                Удалить
+              </button>
+            )}
+          </div>
+
+          {/* Прогресс загрузки */}
+          {uploading && (
+            <div className="mt-2">
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-tg-button h-2 rounded-full transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <div className="text-xs text-tg-hint mt-1 text-center">Загрузка... {uploadProgress}%</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0] || null;
+          onChange(f);
+          // Сбрасываем input чтобы можно было выбрать тот же файл повторно
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+};
+
 const MUSIC_MODEL_ID = 'generate-music';
 
 const Generate: React.FC = () => {
@@ -65,6 +146,8 @@ const Generate: React.FC = () => {
 
   const model = selectedModel ? getModelById(selectedModel) : null;
   const isGenerateMusic = model?.model_id === MUSIC_MODEL_ID;
+  const needsImage = model?.inputs?.image ?? false;
+  const needsVideo = model?.inputs?.video ?? false;
 
   const [prompt, setPrompt] = useState('');
 
@@ -74,6 +157,19 @@ const Generate: React.FC = () => {
   // ── Video параметры ──
   const [duration, setDuration] = useState('5');
   const [resolution, setResolution] = useState('720p');
+
+  // ── File upload состояния ──
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [imageProgress, setImageProgress] = useState(0);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // ── Music параметры (generate-music) ──
   const [musicMv, setMusicMv] = useState('V4');
@@ -90,7 +186,67 @@ const Generate: React.FC = () => {
   const [genericMusicStyle, setGenericMusicStyle] = useState('');
   const [vocalType, setVocalType] = useState('instrumental');
 
-  const canGenerate = model && prompt.trim().length > 0 && balance >= model.credits && !loading;
+  // Обработка выбора изображения
+  const handleImageSelect = async (file: File | null) => {
+    setUploadError(null);
+    if (!file) {
+      setImageFile(null);
+      setImagePreview(null);
+      setImageUrl(null);
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setUploadingImage(true);
+    setImageProgress(0);
+    try {
+      const url = await uploadFile(file, 'image', setImageProgress);
+      setImageUrl(url);
+    } catch (err) {
+      setUploadError((err as Error).message);
+      setImageFile(null);
+      setImagePreview(null);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // Обработка выбора видео
+  const handleVideoSelect = async (file: File | null) => {
+    setUploadError(null);
+    if (!file) {
+      setVideoFile(null);
+      setVideoPreview(null);
+      setVideoUrl(null);
+      return;
+    }
+    setVideoFile(file);
+    setVideoPreview(URL.createObjectURL(file));
+    setUploadingVideo(true);
+    setVideoProgress(0);
+    try {
+      const url = await uploadFile(file, 'video', setVideoProgress);
+      setVideoUrl(url);
+    } catch (err) {
+      setUploadError((err as Error).message);
+      setVideoFile(null);
+      setVideoPreview(null);
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
+  const isUploading = uploadingImage || uploadingVideo;
+  const filesReady =
+    (!needsImage || imageUrl) && (!needsVideo || videoUrl);
+
+  const canGenerate =
+    model &&
+    prompt.trim().length > 0 &&
+    balance >= model.credits &&
+    !loading &&
+    !isUploading &&
+    filesReady;
 
   // Telegram MainButton
   useEffect(() => {
@@ -127,6 +283,10 @@ const Generate: React.FC = () => {
     } else if (model.category === 'video') {
       params.duration = parseInt(duration, 10);
       params.resolution = resolution;
+
+      // Передаём URL загруженных файлов для моделей с image/video input
+      if (imageUrl) params.image_url = imageUrl;
+      if (videoUrl) params.video_url = videoUrl;
     } else if (isGenerateMusic) {
       // Полные параметры для generate-music (PoYo AI Music)
       params.mv = musicMv;
@@ -202,6 +362,41 @@ const Generate: React.FC = () => {
           value={aspectRatio}
           onChange={setAspectRatio}
         />
+      )}
+
+      {/* ══════ File uploads (image/video) ══════ */}
+      {needsImage && (
+        <FileUploadInput
+          label="Reference-изображение"
+          hint="Персонаж/сцена для генерации. JPG, PNG, WebP до 10 МБ"
+          accept="image/jpeg,image/png,image/webp"
+          file={imageFile}
+          previewUrl={imagePreview}
+          uploading={uploadingImage}
+          uploadProgress={imageProgress}
+          onChange={handleImageSelect}
+          fileType="image"
+        />
+      )}
+      {needsVideo && (
+        <FileUploadInput
+          label="Reference-видео"
+          hint="Видео с движениями для переноса. MP4, MOV до 100 МБ, 3-30 сек"
+          accept="video/mp4,video/quicktime,video/webm"
+          file={videoFile}
+          previewUrl={videoPreview}
+          uploading={uploadingVideo}
+          uploadProgress={videoProgress}
+          onChange={handleVideoSelect}
+          fileType="video"
+        />
+      )}
+
+      {/* Ошибка загрузки */}
+      {uploadError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+          <div className="text-sm text-red-600">{uploadError}</div>
+        </div>
       )}
 
       {/* ══════ Video параметры ══════ */}

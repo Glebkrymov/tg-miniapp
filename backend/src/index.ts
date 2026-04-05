@@ -13,6 +13,7 @@ import referralsRouter from './routes/referrals';
 import promoRouter from './routes/promo';
 import userRouter from './routes/user';
 import tasksRouter from './routes/tasks';
+import uploadRouter from './routes/upload';
 import { apiRateLimit, generateRateLimit } from './middleware/rateLimit';
 import { startPolling } from './services/queue';
 import { checkConnection as checkDb, pool } from './config/db';
@@ -90,6 +91,7 @@ app.use('/api/payments', apiRateLimit as any, paymentsRouter);
 app.use('/api/referrals', apiRateLimit as any, referralsRouter);
 app.use('/api/promo', apiRateLimit as any, promoRouter);
 app.use('/api/user', apiRateLimit as any, userRouter);
+app.use('/api/upload', apiRateLimit as any, uploadRouter);
 
 // ── Автоматические миграции при старте ──────────────
 async function runMigrations() {

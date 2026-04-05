@@ -4,6 +4,16 @@
 
 export type Category = 'image' | 'video' | 'music';
 
+/** Какие файлы модель принимает на вход (помимо промпта) */
+export interface ModelInputs {
+  /** Требуется ли reference-изображение */
+  image?: boolean;
+  /** Требуется ли reference-видео */
+  video?: boolean;
+  /** Промпт опционален (по умолчанию обязателен) */
+  promptOptional?: boolean;
+}
+
 export interface Model {
   model_id: string;
   name: string;
@@ -11,6 +21,8 @@ export interface Model {
   credits: number;
   priceUsd: number;
   description?: string;
+  /** Дополнительные входы, кроме промпта */
+  inputs?: ModelInputs;
 }
 
 export const MODELS: Model[] = [
@@ -35,14 +47,14 @@ export const MODELS: Model[] = [
   { model_id: 'kling-2-6',                name: 'Kling 2.6',                category: 'video', credits: 8,   priceUsd: 0.040, description: 'Kling 2.6 бюджетная' },
   { model_id: 'kling-2-5-turbo-pro',      name: 'Kling 2.5 Turbo Pro',      category: 'video', credits: 42,  priceUsd: 0.210, description: 'Kling быстрая премиум' },
   { model_id: 'kling-3',                  name: 'Kling 3.0',                category: 'video', credits: 27,  priceUsd: 0.135, description: 'Новейшая Kling 3.0' },
-  { model_id: 'kling-2-6-motion-control', name: 'Kling 2.6 Motion Control', category: 'video', credits: 8,   priceUsd: 0.040, description: 'Управление движением' },
-  { model_id: 'kling-3-0-motion-control', name: 'Kling 3.0 Motion Control', category: 'video', credits: 9,   priceUsd: 0.045, description: 'Kling 3 + управление движением' },
-  { model_id: 'seedance-1-pro',           name: 'Seedance 1.0 Pro',         category: 'video', credits: 9,   priceUsd: 0.045, description: 'Видео с танцами' },
-  { model_id: 'seedance-1-5-pro',         name: 'Seedance 1.5 Pro',         category: 'video', credits: 9,   priceUsd: 0.045, description: 'Улучшенные танцы' },
+  { model_id: 'kling-2-6-motion-control', name: 'Kling 2.6 Motion Control', category: 'video', credits: 8,   priceUsd: 0.040, description: 'Управление движением', inputs: { image: true, video: true } },
+  { model_id: 'kling-3-0-motion-control', name: 'Kling 3.0 Motion Control', category: 'video', credits: 9,   priceUsd: 0.045, description: 'Kling 3 + управление движением', inputs: { image: true, video: true } },
+  { model_id: 'seedance-1-pro',           name: 'Seedance 1.0 Pro',         category: 'video', credits: 9,   priceUsd: 0.045, description: 'Видео с танцами', inputs: { image: true } },
+  { model_id: 'seedance-1-5-pro',         name: 'Seedance 1.5 Pro',         category: 'video', credits: 9,   priceUsd: 0.045, description: 'Улучшенные танцы', inputs: { image: true } },
   { model_id: 'wan-2-2-fast',             name: 'Wan 2.2 Fast',             category: 'video', credits: 6,   priceUsd: 0.030, description: 'Быстрая генерация видео' },
   { model_id: 'wan-2-5',                  name: 'Wan 2.5',                  category: 'video', credits: 30,  priceUsd: 0.150, description: 'Wan высокое качество' },
   { model_id: 'wan-2-6',                  name: 'Wan 2.6',                  category: 'video', credits: 30,  priceUsd: 0.150, description: 'Wan последняя версия' },
-  { model_id: 'wan-animate',              name: 'Wan Animate',              category: 'video', credits: 30,  priceUsd: 0.150, description: 'Анимация изображений' },
+  { model_id: 'wan-animate',              name: 'Wan Animate',              category: 'video', credits: 30,  priceUsd: 0.150, description: 'Анимация изображений', inputs: { image: true } },
   { model_id: 'hailuo-02',                name: 'Hailuo 02',                category: 'video', credits: 35,  priceUsd: 0.175, description: 'Hailuo стандартная' },
   { model_id: 'hailuo-2-3',               name: 'Hailuo 2.3',               category: 'video', credits: 35,  priceUsd: 0.175, description: 'Hailuo улучшенная' },
   { model_id: 'runway-gen-4-5',           name: 'Runway Gen-4.5',           category: 'video', credits: 75,  priceUsd: 0.375, description: 'Runway премиум' },

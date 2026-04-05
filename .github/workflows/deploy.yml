@@ -109,7 +109,9 @@ jobs:
             --secret environment-variable=YOOKASSA_SHOP_ID,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=YOOKASSA_SHOP_ID \
             --secret environment-variable=YOOKASSA_SECRET_KEY,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=YOOKASSA_SECRET_KEY \
             --secret environment-variable=ALERT_BOT_TOKEN,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=ALERT_BOT_TOKEN \
-            --secret environment-variable=ALERT_CHAT_ID,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=ALERT_CHAT_ID
+            --secret environment-variable=ALERT_CHAT_ID,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=ALERT_CHAT_ID \
+            --secret environment-variable=S3_ACCESS_KEY_ID,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=S3_ACCESS_KEY_ID \
+            --secret environment-variable=S3_SECRET_ACCESS_KEY,id=$YC_LOCKBOX_SECRET_ID,version-id=$VID,key=S3_SECRET_ACCESS_KEY
 
   # ── Деплой frontend ───────────────────────────────
   deploy-frontend:
