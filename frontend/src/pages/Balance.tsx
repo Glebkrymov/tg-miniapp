@@ -108,11 +108,19 @@ const Balance: React.FC = () => {
     try {
       const res = await apiClient.post('/api/payments/create', { package_id: packageId });
       if (res.data.success && res.data.data.confirmation_url) {
-        // Открываем страницу оплаты YooKassa
-        window.open(res.data.data.confirmation_url, '_blank');
+        const url = res.data.data.confirmation_url;
+        // Используем Telegram WebApp API для открытия ссылки
+        if (window.Telegram?.WebApp?.openLink) {
+          window.Telegram.WebApp.openLink(url);
+        } else {
+          window.location.href = url;
+        }
+      } else {
+        alert('Не удалось создать платёж');
       }
-    } catch {
-      // ошибка создания платежа
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || 'Ошибка создания платежа';
+      alert(msg);
     } finally {
       setLoading(null);
     }
