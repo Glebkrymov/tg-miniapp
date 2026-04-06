@@ -35,7 +35,11 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+    // Для Kling Motion Control промпт опционален (описание сцены)
+    const PROMPT_OPTIONAL_MODELS = ['kling-2-6-motion-control', 'kling-3-0-motion-control'];
+    const isPromptOptional = PROMPT_OPTIONAL_MODELS.includes(modelId);
+
+    if (!isPromptOptional && (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0)) {
       res.status(400).json({ success: false, error: 'Промпт не может быть пустым' });
       return;
     }
@@ -96,7 +100,11 @@ router.post('/', async (req: Request, res: Response) => {
     let poyoTaskId: string;
 
     try {
-      poyoTaskId = await poyoClient.submitTask(modelId, { prompt, ...params }, callbackUrl);
+      // Для моделей с опциональным промптом — не передаём пустой prompt
+      const input = prompt?.trim()
+        ? { prompt: prompt.trim(), ...params }
+        : { ...params };
+      poyoTaskId = await poyoClient.submitTask(modelId, input, callbackUrl);
     } catch (err) {
       // Возвращаем кредиты при ошибке отправки (если не бесплатная генерация)
       if (!isFreeGeneration) {

@@ -139,6 +139,27 @@ const FileUploadInput: React.FC<{
 
 const MUSIC_MODEL_ID = 'generate-music';
 
+/** Модели Kling Motion Control — длительность определяется reference-видео */
+const KLING_MOTION_CONTROL_MODELS = ['kling-2-6-motion-control', 'kling-3-0-motion-control'];
+
+/** Получить длительность видеофайла через HTML5 video element */
+function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    const url = URL.createObjectURL(file);
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(video.duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Не удалось прочитать метаданные видео'));
+    };
+    video.src = url;
+  });
+}
+
 const Generate: React.FC = () => {
   const { selectedModel, setPage } = useUiStore();
   const { balance } = useUserStore();
@@ -146,6 +167,7 @@ const Generate: React.FC = () => {
 
   const model = selectedModel ? getModelById(selectedModel) : null;
   const isGenerateMusic = model?.model_id === MUSIC_MODEL_ID;
+  const isKlingMotionControl = model ? KLING_MOTION_CONTROL_MODELS.includes(model.model_id) : false;
   const needsImage = model?.inputs?.image ?? false;
   const needsVideo = model?.inputs?.video ?? false;
 
@@ -157,6 +179,11 @@ const Generate: React.FC = () => {
   // ── Video параметры ──
   const [duration, setDuration] = useState('5');
   const [resolution, setResolution] = useState('720p');
+
+  // ── Kling Motion Control параметры ──
+  const [characterOrientation, setCharacterOrientation] = useState<'image' | 'video'>('video');
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [videoValidationError, setVideoValidationError] = useState<string | null>(null);
 
   // ── File upload состояния ──
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -214,12 +241,57 @@ const Generate: React.FC = () => {
   // Обработка выбора видео
   const handleVideoSelect = async (file: File | null) => {
     setUploadError(null);
+    setVideoValidationError(null);
+    setVideoDuration(null);
+
     if (!file) {
       setVideoFile(null);
       setVideoPreview(null);
       setVideoUrl(null);
       return;
     }
+
+    // ── Валидация для Kling Motion Control ──
+    if (isKlingMotionControl) {
+      // Проверка размера (макс 100 МБ)
+      const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+      if (file.size > MAX_VIDEO_SIZE) {
+        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+        setVideoValidationError(
+          `Видео слишком большое (${sizeMB} МБ). Максимальный размер — 100 МБ. Пожалуйста, загрузите видео меньшего размера или сожмите текущее.`
+        );
+        return;
+      }
+
+      // Проверка длительности (3–30 секунд)
+      try {
+        const dur = await getVideoDuration(file);
+        if (dur < 3) {
+          setVideoValidationError(
+            `Видео слишком короткое (${dur.toFixed(1)} сек). Минимальная длительность — 3 секунды. Пожалуйста, загрузите более длинное видео.`
+          );
+          return;
+        }
+        if (dur > 30) {
+          setVideoValidationError(
+            `Видео слишком длинное (${dur.toFixed(1)} сек). Максимальная длительность — 30 секунд. Пожалуйста, обрежьте видео или загрузите более короткое.`
+          );
+          return;
+        }
+        // Для character_orientation="image" макс 10 секунд
+        if (characterOrientation === 'image' && dur > 10) {
+          setVideoValidationError(
+            `При ориентации «По изображению» максимальная длительность видео — 10 секунд (ваше видео ${dur.toFixed(1)} сек). Выберите ориентацию «По видео» или загрузите видео до 10 секунд.`
+          );
+          return;
+        }
+        setVideoDuration(dur);
+      } catch {
+        setVideoValidationError('Не удалось определить длительность видео. Попробуйте другой файл.');
+        return;
+      }
+    }
+
     setVideoFile(file);
     setVideoPreview(URL.createObjectURL(file));
     setUploadingVideo(true);
@@ -236,17 +308,31 @@ const Generate: React.FC = () => {
     }
   };
 
+  // При смене characterOrientation — ревалидация загруженного видео
+  useEffect(() => {
+    if (!isKlingMotionControl || !videoFile || !videoDuration) return;
+    setVideoValidationError(null);
+    if (characterOrientation === 'image' && videoDuration > 10) {
+      setVideoValidationError(
+        `При ориентации «По изображению» максимальная длительность видео — 10 секунд (ваше видео ${videoDuration.toFixed(1)} сек). Выберите ориентацию «По видео» или загрузите видео до 10 секунд.`
+      );
+    }
+  }, [characterOrientation, videoDuration, isKlingMotionControl, videoFile]);
+
   const isUploading = uploadingImage || uploadingVideo;
   const filesReady =
     (!needsImage || imageUrl) && (!needsVideo || videoUrl);
 
+  const promptOk = model?.inputs?.promptOptional || prompt.trim().length > 0;
+
   const canGenerate =
     model &&
-    prompt.trim().length > 0 &&
+    promptOk &&
     balance >= model.credits &&
     !loading &&
     !isUploading &&
-    filesReady;
+    filesReady &&
+    !videoValidationError;
 
   // Telegram MainButton
   useEffect(() => {
@@ -280,6 +366,12 @@ const Generate: React.FC = () => {
 
     if (model.category === 'image') {
       params.size = aspectRatio;
+    } else if (isKlingMotionControl) {
+      // Kling Motion Control: длительность определяется reference-видео, duration не передаём
+      params.character_orientation = characterOrientation;
+      params.resolution = resolution;
+      if (imageUrl) params.image_urls = [imageUrl];
+      if (videoUrl) params.video_urls = [videoUrl];
     } else if (model.category === 'video') {
       params.duration = parseInt(duration, 10);
       params.resolution = resolution;
@@ -392,6 +484,14 @@ const Generate: React.FC = () => {
         />
       )}
 
+      {/* Ошибка валидации видео (Kling Motion Control) */}
+      {videoValidationError && (
+        <div className="bg-orange-50 border border-orange-300 rounded-xl p-3 mb-4">
+          <div className="text-sm text-orange-700 font-semibold mb-1">Видео не подходит</div>
+          <div className="text-sm text-orange-600">{videoValidationError}</div>
+        </div>
+      )}
+
       {/* Ошибка загрузки */}
       {uploadError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
@@ -399,8 +499,43 @@ const Generate: React.FC = () => {
         </div>
       )}
 
-      {/* ══════ Video параметры ══════ */}
-      {model.category === 'video' && (
+      {/* ══════ Kling Motion Control параметры ══════ */}
+      {isKlingMotionControl && (
+        <>
+          <ButtonGroup
+            label="Ориентация персонажа"
+            options={[
+              { key: 'video', label: 'По видео (до 30с)' },
+              { key: 'image', label: 'По фото (до 10с)' },
+            ]}
+            value={characterOrientation}
+            onChange={(v) => setCharacterOrientation(v as 'image' | 'video')}
+          />
+
+          {/* Информация о длительности из reference-видео */}
+          {videoDuration !== null && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+              <div className="text-sm text-blue-700">
+                Длительность reference-видео: <span className="font-semibold">{videoDuration.toFixed(1)} сек</span>
+                {' '}— выходное видео будет такой же длительности.
+              </div>
+            </div>
+          )}
+
+          <ButtonGroup
+            label="Разрешение"
+            options={[
+              { key: '720p', label: '720p' },
+              { key: '1080p', label: '1080p' },
+            ]}
+            value={resolution}
+            onChange={setResolution}
+          />
+        </>
+      )}
+
+      {/* ══════ Video параметры (обычные видео-модели, не Motion Control) ══════ */}
+      {model.category === 'video' && !isKlingMotionControl && (
         <>
           <ButtonGroup
             label="Длительность"
